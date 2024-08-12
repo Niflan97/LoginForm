@@ -1,7 +1,9 @@
 ﻿using System.Diagnostics;
+using LogInProject.Data;
 using LogInProject.Models;
 using LogInProject.Service;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace LogInProject.Controllers;
 
@@ -10,10 +12,13 @@ public class HomeController : Controller
     private readonly ILogger<HomeController> _logger;
 
     private readonly IAuthenticationService _authenticationService;
+    private readonly UserDbContext _context;
 
-    public HomeController(IAuthenticationService authenticationService)
+
+    public HomeController(IAuthenticationService authenticationService, UserDbContext context)
     {
         _authenticationService = authenticationService;
+        _context = context;
     }
 
     public IActionResult Index()
@@ -29,27 +34,46 @@ public class HomeController : Controller
     [HttpGet]
     public IActionResult Login()
     {
+        if (!_context.IsDatabaseConnected())
+        {
+            ViewBag.Error = "Unable to connect to the database. Please try again later.";
+            return View("Error", "Home");
+        }
         return View();
     }
 
+
     [HttpPost]
-    public IActionResult Login(LoginViewModel model)
+    public async Task<IActionResult> Login(LoginViewModel model)
     {
-        if (ModelState.IsValid)
+        try
         {
-            bool isAuthenticated = _authenticationService.Authenticate(model.Username, model.Password);
+            if (!_context.IsDatabaseConnected())
+            {
+                ViewBag.Error = "Unable to connect to the database. Please try again later.";
+                return View("Error", "Home");
+            }
+
+            var isAuthenticated = await _authenticationService.AuthenticateAsync(model.Username, model.Password);
+
             if (isAuthenticated)
             {
-
                 return RedirectToAction("Index", "Home");
             }
             else
             {
-                ModelState.AddModelError(string.Empty, "Invalid Username or Password.");
+                ViewBag.Error = "Username or password is incorrect!";
+                return View("Login"); 
             }
         }
-        return View(model);
+        catch (Exception ex)
+        {
+            Console.WriteLine(ex.Message);
+            ViewBag.Error = "An unexpected error occurred. Please try again.";
+            return RedirectToAction("Login"); 
+        }
     }
+
 
     [ResponseCache(Duration = 0, Location = ResponseCacheLocation.None, NoStore = true)]
     public IActionResult Error()
